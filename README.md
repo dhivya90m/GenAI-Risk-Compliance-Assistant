@@ -23,7 +23,9 @@ This project demonstrates how to combine advanced data engineering, Retrieval-Au
 - **Application Layer:** Streamlit app with multi-agent logic (compliance, risk, summarization) and analytics
 - **Security:** All access and actions are managed by Snowflake roles and logging
 
-For a detailed system diagram and data flow, see [`docs/architecture.md`](docs/architecture.md).
+For a detailed system diagram and data flow, see [`Docs/architecture.md`](Docs/architecture.md).
+![generated-image](https://github.com/user-attachments/assets/3bae6d01-f97a-4c92-866a-23a405dfa75d)
+
 
 ---
 
