@@ -24,8 +24,6 @@ This project demonstrates how to combine advanced data engineering, Retrieval-Au
 - **Security:** All access and actions are managed by Snowflake roles and logging
 
 For a detailed system diagram and data flow, see [`Docs/architecture.md`](Docs/architecture.md).
-![generated-image](https://github.com/user-attachments/assets/3bae6d01-f97a-4c92-866a-23a405dfa75d)
-
 
 ---
 
