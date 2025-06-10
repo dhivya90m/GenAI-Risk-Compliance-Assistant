@@ -1,0 +1,277 @@
+-- ============================================================================
+-- 1. DATABASE AND SCHEMA SETUP
+-- ============================================================================
+
+-- Create database and schema for SEC data (if not already created)
+CREATE DATABASE IF NOT EXISTS sec_data;
+USE DATABASE sec_data;
+
+CREATE SCHEMA IF NOT EXISTS q1_2025;
+USE SCHEMA q1_2025;
+
+-- ============================================================================
+-- 2. RAW TABLE CREATION (FOR BULK DATA LOAD)
+-- ============================================================================
+
+-- Table: sub (company and filing metadata)
+CREATE TABLE IF NOT EXISTS sub (
+  adsh STRING,           -- Accession number (unique filing ID)
+  cik STRING,            -- Central Index Key (company identifier)
+  name STRING,           -- Company name
+  sic STRING,            -- SIC code
+  countryba STRING,      -- Country of business address
+  stprba STRING,         -- State/province of business address
+  cityba STRING,         -- City of business address
+  zipba STRING,          -- ZIP code of business address
+  bas1 STRING,           -- Business address line 1
+  bas2 STRING,           -- Business address line 2
+  baph STRING,           -- Business phone number
+  countryma STRING,      -- Country of mailing address
+  stprma STRING,         -- State/province of mailing address
+  cityma STRING,         -- City of mailing address
+  zipma STRING,          -- ZIP code of mailing address
+  mas1 STRING,           -- Mailing address line 1
+  mas2 STRING,           -- Mailing address line 2
+  countryinc STRING,     -- Country of incorporation
+  stprinc STRING,        -- State/province of incorporation
+  ein STRING,            -- Employer ID number
+  form STRING,           -- Form type (e.g., 10-K)
+  period STRING,         -- Reporting period
+  fy STRING,             -- Fiscal year
+  fp STRING,             -- Fiscal period
+  filed STRING,          -- Filing date
+  accepted STRING,       -- Acceptance date
+  prevrpt STRING,        -- Previous report indicator
+  detail STRING,         -- Detail indicator
+  instance STRING,       -- Instance document
+  nciks STRING           -- Number of CIKs
+);
+
+-- ============================================================================
+-- 3. DATA INGESTION (BULK LOAD FROM STAGED FILES)
+-- ============================================================================
+
+-- Load data into raw tables from staged files (adjust stage/path as needed)
+COPY INTO sub FROM @~/sub.txt FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '\t' SKIP_HEADER = 1);
+COPY INTO num FROM @~/num.txt FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '\t' SKIP_HEADER = 1);
+COPY INTO tag FROM @~/tag.txt FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '\t' SKIP_HEADER = 1);
+COPY INTO pre FROM @~/pre.txt FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = '\t' SKIP_HEADER = 1);
+
+-- ============================================================================
+-- 4. DATA PREVIEW AND EXPLORATION
+-- ============================================================================
+
+-- Preview first 10 rows of each table
+SELECT * FROM sub LIMIT 10;
+SELECT * FROM num LIMIT 10;
+SELECT * FROM tag LIMIT 10;
+SELECT * FROM pre LIMIT 10;
+
+-- ============================================================================
+-- 5. BUSINESS INSIGHTS: BASIC ANALYTICS
+-- ============================================================================
+
+-- Top 5 companies by reported revenue
+SELECT s.name, n.value AS revenue, n.ddate
+FROM num n
+JOIN sub s ON n.adsh = s.adsh
+WHERE n.tag = 'Revenues'
+ORDER BY n.value DESC
+LIMIT 5;
+
+-- Top 5 companies with negative net income (losses)
+SELECT s.name, n.value AS net_income, n.ddate
+FROM num n
+JOIN sub s ON n.adsh = s.adsh
+WHERE n.tag = 'NetIncomeLoss' AND n.value < 0
+ORDER BY n.value ASC
+LIMIT 5;
+
+-- ============================================================================
+-- 6. PRODUCTION TABLES (WITH DATA TYPES FOR ANALYTICS)
+-- ============================================================================
+
+-- NUM: All reported financial facts (numbers)
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.NUM (
+  ADSH VARCHAR(16777216),
+  TAG VARCHAR(16777216),
+  VERSION VARCHAR(16777216),
+  DDATE NUMBER(38,0),
+  QTRS NUMBER(38,0),
+  UOM VARCHAR(16777216),
+  SEGMENTS VARCHAR(16777216),
+  COREG VARCHAR(16777216),
+  VALUE NUMBER(38,4),
+  FOOTNOTE VARCHAR(16777216)
+);
+
+-- PRE: Statement presentation (layout/labels)
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.PRE (
+  ADSH VARCHAR(16777216),
+  REPORT NUMBER(38,0),
+  LINE NUMBER(38,0),
+  STMT VARCHAR(16777216),
+  INPTH NUMBER(38,0),
+  RFILE VARCHAR(16777216),
+  TAG VARCHAR(16777216),
+  VERSION VARCHAR(16777216),
+  PLABEL VARCHAR(16777216),
+  NEGATING NUMBER(38,0)
+);
+
+-- SUB: Company and filing metadata
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.SUB (
+  ADSH VARCHAR(16777216),
+  CIK NUMBER(38,0),
+  NAME VARCHAR(16777216),
+  SIC NUMBER(38,0),
+  COUNTRYBA VARCHAR(16777216),
+  STPRBA VARCHAR(16777216),
+  CITYBA VARCHAR(16777216),
+  ZIPBA VARCHAR(16777216),
+  BAS1 VARCHAR(16777216),
+  BAS2 VARCHAR(16777216),
+  BAPH VARCHAR(16777216),
+  COUNTRYMA VARCHAR(16777216),
+  STPRMA VARCHAR(16777216),
+  CITYMA VARCHAR(16777216),
+  ZIPMA VARCHAR(16777216),
+  MAS1 VARCHAR(16777216),
+  MAS2 VARCHAR(16777216),
+  COUNTRYINC VARCHAR(16777216),
+  STPRINC VARCHAR(16777216),
+  EIN NUMBER(38,0),
+  FORMER VARCHAR(16777216),
+  CHANGED NUMBER(38,0),
+  AFS VARCHAR(16777216),
+  WKSI NUMBER(38,0),
+  FYE NUMBER(38,0),
+  FORM VARCHAR(16777216),
+  PERIOD NUMBER(38,0),
+  FY NUMBER(38,0),
+  FP VARCHAR(16777216),
+  FILED NUMBER(38,0),
+  ACCEPTED TIMESTAMP_NTZ(9),
+  PREVRPT NUMBER(38,0),
+  DETAIL NUMBER(38,0),
+  INSTANCE VARCHAR(16777216),
+  NCIKS NUMBER(38,0),
+  ACIKS VARCHAR(16777216)
+);
+
+-- TAG: Definitions for each financial fact
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.TAG (
+  TAG VARCHAR(16777216),
+  VERSION VARCHAR(16777216),
+  CUSTOM NUMBER(38,0),
+  ABSTRACT NUMBER(38,0),
+  DATATYPE VARCHAR(16777216),
+  IORD VARCHAR(16777216),
+  CRDR VARCHAR(16777216),
+  TLABEL VARCHAR(16777216),
+  DOC VARCHAR(16777216)
+);
+
+-- ============================================================================
+-- 7. ANALYTICS AGENT TABLES & VIEWS (COMPLIANCE, RISK, SUMMARIZATION)
+-- ============================================================================
+
+-- Aggregated table: Key facts by company and filing
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD AS
+SELECT
+  s.NAME AS company_name,
+  s.FORM AS report_type,
+  s.PERIOD AS period,
+  MAX(CASE WHEN n.TAG = 'Revenues' THEN n.VALUE END) AS revenue,
+  MAX(CASE WHEN n.TAG = 'NetIncomeLoss' THEN n.VALUE END) AS net_income,
+  MAX(CASE WHEN n.TAG = 'Assets' THEN n.VALUE END) AS assets,
+  MAX(CASE WHEN n.TAG = 'Liabilities' THEN n.VALUE END) AS liabilities,
+  MAX(CASE WHEN n.TAG = 'EarningsPerShareBasic' THEN n.VALUE END) AS eps_basic
+FROM
+  SEC_DATA.PUBLIC.SUB s
+  JOIN SEC_DATA.PUBLIC.NUM n ON s.ADSH = n.ADSH
+WHERE
+  n.TAG IN ('Revenues', 'NetIncomeLoss', 'Assets', 'Liabilities', 'EarningsPerShareBasic')
+GROUP BY
+  s.NAME, s.FORM, s.PERIOD;
+
+-- Compliance Agent: Filings missing key metrics
+CREATE OR REPLACE VIEW SEC_DATA.PUBLIC.NON_COMPLIANT_FILINGS AS
+SELECT company_name, report_type, period
+FROM SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD
+WHERE revenue IS NULL OR net_income IS NULL OR assets IS NULL OR liabilities IS NULL;
+
+-- Risk Agent: High-risk filings (negative net income or high liabilities/assets)
+CREATE OR REPLACE VIEW SEC_DATA.PUBLIC.HIGH_RISK_FILINGS AS
+SELECT
+  company_name,
+  report_type,
+  period,
+  net_income,
+  liabilities,
+  assets,
+  CASE WHEN assets > 0 THEN liabilities/assets ELSE NULL END AS liability_asset_ratio
+FROM SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD
+WHERE net_income < 0 OR (assets > 0 AND liabilities/assets > 1);
+
+-- Grant SELECT permission on high-risk filings view (for dashboard users)
+GRANT SELECT ON VIEW SEC_DATA.PUBLIC.HIGH_RISK_FILINGS TO ROLE PUBLIC;
+
+-- Summarization Agent: AI-powered summaries for each filing
+CREATE OR REPLACE VIEW SEC_DATA.PUBLIC.FILING_SUMMARIES AS
+SELECT
+  company_name,
+  report_type,
+  period,
+  SNOWFLAKE.CORTEX.SUMMARIZE(
+    'In ' || report_type || ' for period ' || period || ', ' || company_name ||
+    ' reported revenue of $' || revenue ||
+    ', net income of $' || net_income ||
+    ', assets of $' || assets ||
+    ', and liabilities of $' || liabilities || '.'
+  ) AS ai_summary
+FROM SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD;
+
+-- ============================================================================
+-- 8. RAG PIPELINE: CHUNKING, EMBEDDINGS, AND VECTOR SEARCH
+-- ============================================================================
+
+-- Step 1: Chunk filings for RAG
+CREATE OR REPLACE TABLE SEC_DATA.PUBLIC.DOC_CHUNKS AS
+SELECT
+  company_name,
+  report_type,
+  period,
+  'In ' || report_type || ' for period ' || period || ', ' || company_name ||
+  ' reported revenue of $' || COALESCE(TO_VARCHAR(revenue), 'N/A') ||
+  ', net income of $' || COALESCE(TO_VARCHAR(net_income), 'N/A') ||
+  ', assets of $' || COALESCE(TO_VARCHAR(assets), 'N/A') ||
+  ', and liabilities of $' || COALESCE(TO_VARCHAR(liabilities), 'N/A') || '.' AS text_chunk
+FROM SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD
+WHERE revenue IS NOT NULL OR net_income IS NOT NULL OR assets IS NOT NULL OR liabilities IS NOT NULL;
+
+-- Step 2: Add embedding column for vector search
+ALTER TABLE SEC_DATA.PUBLIC.DOC_CHUNKS ADD COLUMN embedding VECTOR(FLOAT, 768);
+
+-- Step 3: Generate embeddings for each chunk using Cortex
+UPDATE SEC_DATA.PUBLIC.DOC_CHUNKS
+SET embedding = SNOWFLAKE.CORTEX.EMBED_TEXT_768('snowflake-arctic-embed-m-v1.5', text_chunk)
+WHERE embedding IS NULL;
+
+-- ============================================================================
+-- 9. VALIDATION & UTILITIES
+-- ============================================================================
+
+-- Check embedding column and row count
+DESC TABLE SEC_DATA.PUBLIC.DOC_CHUNKS;
+SELECT COUNT(*) FROM SEC_DATA.PUBLIC.DOC_CHUNKS WHERE embedding IS NOT NULL;
+
+-- Check vector function availability
+SHOW FUNCTIONS LIKE 'VECTOR_COSINE_SIMILARITY';
+
+-- ============================================================================
+-- END OF WORKSHEET
+-- ============================================================================
+
+
+
