@@ -56,7 +56,7 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## Data Model (Plain English)
+## Data Model
 
 | Table | What It Stores                               | Key Columns                  | Example Use                                                      |
 |-------|----------------------------------------------|------------------------------|------------------------------------------------------------------|
@@ -69,7 +69,8 @@ streamlit run app/streamlit_app.py
 
 ## 📸 Screenshots
 
-![Dashboard Screenshot](images/dashboard_screenshot.png)
+![Dashboard Screenshot](GenAI-Risk-Compliance-Assistant
+/GenAI-Risk-Compliance-Assistant Images.md).
 
 ---
 
