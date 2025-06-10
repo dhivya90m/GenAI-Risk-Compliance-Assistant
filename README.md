@@ -56,7 +56,7 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## 🗃️ Data Model (Plain English)
+## Data Model (Plain English)
 
 | Table | What It Stores                               | Key Columns                  | Example Use                                                      |
 |-------|----------------------------------------------|------------------------------|------------------------------------------------------------------|
@@ -73,7 +73,7 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 - [System Architecture](docs/architecture.md)
 - [Data Model](docs/data_model.md)
@@ -81,13 +81,13 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Pull requests and suggestions are welcome! For major changes, please open an issue first to discuss what you’d like to change.
 
 ---
 
-## ⭐️ Acknowledgments
+## Acknowledgments
 
 - Inspired by GenAI and RAG best practices at JPMC and other leading financial institutions.
 - Built with [Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex), [Streamlit](https://streamlit.io/), and SEC XBRL data.
