@@ -67,13 +67,6 @@ streamlit run app/streamlit_app.py
 
 ---
 
-## 📸 Screenshots
-
-![Dashboard Screenshot](GenAI-Risk-Compliance-Assistant
-/GenAI-Risk-Compliance-Assistant Images.md).
-
----
-
 ## Documentation
 
 - [System Architecture](docs/architecture.md)
