@@ -1,0 +1,106 @@
+-- ============================================================================
+-- SNOWPIPE AUTO-INGEST SETUP (ONE PER TABLE)
+-- ============================================================================
+
+CREATE OR REPLACE PIPE sub_pipe 
+AUTO_INGEST = TRUE 
+AS COPY INTO sub 
+FROM @sec_data_stage/sub/ 
+FILE_FORMAT = (TYPE='CSV', FIELD_DELIMITER='\t', SKIP_HEADER=1);
+
+CREATE OR REPLACE PIPE num_pipe 
+AUTO_INGEST = TRUE 
+AS COPY INTO num 
+FROM @sec_data_stage/num/ 
+FILE_FORMAT = (TYPE='CSV', FIELD_DELIMITER='\t', SKIP_HEADER=1);
+
+CREATE OR REPLACE PIPE tag_pipe 
+AUTO_INGEST = TRUE 
+AS COPY INTO tag 
+FROM @sec_data_stage/tag/ 
+FILE_FORMAT = (TYPE='CSV', FIELD_DELIMITER='\t', SKIP_HEADER=1);
+
+CREATE OR REPLACE PIPE pre_pipe 
+AUTO_INGEST = TRUE 
+AS COPY INTO pre 
+FROM @sec_data_stage/pre/ 
+FILE_FORMAT = (TYPE='CSV', FIELD_DELIMITER='\t', SKIP_HEADER=1);
+
+-- ============================================================================
+-- CHANGE DATA CAPTURE SETUP (STREAMS)
+-- ============================================================================
+
+CREATE OR REPLACE STREAM sub_stream ON TABLE sub APPEND_ONLY = TRUE;
+CREATE OR REPLACE STREAM num_stream ON TABLE num APPEND_ONLY = TRUE;
+CREATE OR REPLACE STREAM tag_stream ON TABLE tag APPEND_ONLY = TRUE;
+CREATE OR REPLACE STREAM pre_stream ON TABLE pre APPEND_ONLY = TRUE;
+
+-- Stream to track processed chunks needing embeddings
+CREATE OR REPLACE STREAM chunks_stream 
+ON TABLE SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD 
+APPEND_ONLY = TRUE;
+
+-- ============================================================================
+-- AUTOMATED PROCESSING TASKS (TRIGGERED BY STREAMS)
+-- ============================================================================
+
+-- Main transformation task (triggered by raw data changes)
+CREATE OR REPLACE TASK process_company_chunks
+  WAREHOUSE = COMPUTE_WH
+  WHEN (
+    SYSTEM$STREAM_HAS_DATA('sub_stream') OR
+    SYSTEM$STREAM_HAS_DATA('num_stream') OR
+    SYSTEM$STREAM_HAS_DATA('tag_stream') OR
+    SYSTEM$STREAM_HAS_DATA('pre_stream')
+  )
+AS
+INSERT INTO SEC_DATA.PUBLIC.COMPANY_CHUNKS_PROD
+SELECT
+  s.NAME AS company_name,
+  s.FORM AS report_type,
+  s.PERIOD AS period,
+  MAX(CASE WHEN n.TAG = 'Revenues' THEN n.VALUE END) AS revenue,
+  MAX(CASE WHEN n.TAG = 'NetIncomeLoss' THEN n.VALUE END) AS net_income,
+  MAX(CASE WHEN n.TAG = 'Assets' THEN n.VALUE END) AS assets,
+  MAX(CASE WHEN n.TAG = 'Liabilities' THEN n.VALUE END) AS liabilities,
+  MAX(CASE WHEN n.TAG = 'EarningsPerShareBasic' THEN n.VALUE END) AS eps_basic
+FROM sub_stream s
+JOIN num_stream n ON s.ADSH = n.ADSH
+WHERE n.TAG IN ('Revenues','NetIncomeLoss','Assets','Liabilities','EarningsPerShareBasic')
+GROUP BY s.NAME, s.FORM, s.PERIOD;
+
+ALTER TASK process_company_chunks RESUME;
+
+-- Embedding generation task (triggered by new chunks)
+CREATE OR REPLACE TASK generate_embeddings
+  WAREHOUSE = COMPUTE_WH
+  WHEN SYSTEM$STREAM_HAS_DATA('chunks_stream')
+AS
+INSERT INTO SEC_DATA.PUBLIC.DOC_CHUNKS
+SELECT
+  company_name,
+  report_type,
+  period,
+  'In ' || report_type || ' for ' || period || ', ' || company_name || 
+  ' reported: Revenue=$' || revenue || ', Net Income=$' || net_income ||
+  ', Assets=$' || assets || ', Liabilities=$' || liabilities AS text_chunk,
+  SNOWFLAKE.CORTEX.EMBED_TEXT_768('snowflake-arctic-embed-m-v1.5', text_chunk) AS embedding
+FROM chunks_stream;
+
+ALTER TASK generate_embeddings RESUME;
+
+-- ============================================================================
+-- INITIAL SETUP
+-- ============================================================================
+
+-- Create DOC_CHUNKS table if not exists
+CREATE TABLE IF NOT EXISTS SEC_DATA.PUBLIC.DOC_CHUNKS (
+  company_name STRING,
+  report_type STRING,
+  period STRING,
+  text_chunk STRING,
+  embedding VECTOR(FLOAT, 768)
+);
+
+SHOW TASKS IN SCHEMA SEC_DATA.PUBLIC
+
